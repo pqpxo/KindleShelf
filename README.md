@@ -1,6 +1,6 @@
 <!-- version 3 -->
 <p align="center">
-  <img src="logo.png" alt="KindleShelf" width="248" />
+  <img src="kslogo.png" alt="KindleShelf" width="248" />
 </p>
 
 # KindleShelf Local
