@@ -19,7 +19,7 @@ services:
       CONVERSION_TIMEOUT_SECONDS: ${CONVERSION_TIMEOUT_SECONDS:-300}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-100}
     ports:
-      - "${WEB_PORT:-8112}:8080"
+      - "${WEB_PORT:-8112}:8112"
     volumes:
       - ./library:/library
       - ./data:/data
