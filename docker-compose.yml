@@ -1,0 +1,48 @@
+# version 4
+services:
+  kindleshelf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kindleshelf-local
+    restart: unless-stopped
+    network_mode: bridge
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      TZ: ${TZ:-Europe/London}
+      HOME: /data/home
+      LIBRARY_PATH: /library
+      DATA_PATH: /data
+      SECRET_KEY: ${SECRET_KEY}
+      APP_PIN: ${APP_PIN:-}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      CONVERSION_TIMEOUT_SECONDS: ${CONVERSION_TIMEOUT_SECONDS:-300}
+      MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-100}
+    ports:
+      - "${WEB_PORT:-8112}:8080"
+    volumes:
+      - ./library:/library
+      - ./data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  samba:
+    image: docker.io/dockurr/samba:latest
+    container_name: kindleshelf-smb
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      NAME: KindleShelf
+      USER: ${SMB_USER:-kindle}
+      PASS: ${SMB_PASSWORD}
+      UID: ${PUID:-1000}
+      GID: ${PGID:-1000}
+      RW: "true"
+    ports:
+      - "445:445"
+    volumes:
+      - ./library:/storage
+    security_opt:
+      - no-new-privileges:true

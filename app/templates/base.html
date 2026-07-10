@@ -1,0 +1,44 @@
+<!-- version 6 -->
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}KindleShelf Local{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='5') }}">
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <a class="brand" href="{{ url_for('index') }}">KindleShelf <span>Local</span></a>
+            <nav aria-label="Main navigation">
+                <a href="{{ url_for('index') }}">Library</a>
+                <a href="{{ url_for('upload_book') }}">Upload</a>
+                {% if config.APP_PIN %}
+                <form class="inline-form" method="post" action="{{ url_for('logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="nav-button" type="submit">Log out</button>
+                </form>
+                {% endif %}
+            </nav>
+        </div>
+    </header>
+
+    <main class="page-shell">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section aria-label="Messages">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <p>Built by <a href="https://www.swakes.co.uk">SWAKES</a></p>
+    </footer>
+</body>
+</html>

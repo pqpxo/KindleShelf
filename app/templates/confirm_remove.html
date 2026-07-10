@@ -1,0 +1,16 @@
+<!-- version 1 -->
+{% extends "base.html" %}
+{% block title %}Remove {{ book.title }} · KindleShelf Local{% endblock %}
+{% block content %}
+<section class="narrow-panel">
+    <p class="eyebrow">Remove from library</p>
+    <h1>{{ book.title }}</h1>
+    <p>This permanently deletes <strong>{{ book.relative_path }}</strong> from the SMB-backed library folder.</p>
+    <p class="warning-text">This action cannot be undone by KindleShelf.</p>
+    <form method="post" action="{{ url_for('remove_book', book_id=book.book_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="button button-danger button-block" type="submit">Remove book</button>
+    </form>
+    <a class="button button-secondary button-block" href="{{ url_for('index') }}">Cancel</a>
+</section>
+{% endblock %}

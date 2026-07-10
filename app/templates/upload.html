@@ -1,0 +1,27 @@
+<!-- version 2 -->
+{% extends "base.html" %}
+{% block title %}Upload · KindleShelf Local{% endblock %}
+{% block content %}
+<section class="narrow-panel upload-panel">
+    <p class="eyebrow">Add to library</p>
+    <h1>Upload a MOBI ebook</h1>
+    <p class="muted">
+        Select a DRM-free <strong>.mobi</strong> file. It will be added directly to the shared KindleShelf library.
+    </p>
+
+    <form method="post" action="{{ url_for('upload_book') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <label for="ebook">MOBI file</label>
+        <input id="ebook" name="ebook" type="file" accept=".mobi,application/x-mobipocket-ebook" required>
+
+        <p class="upload-limit">Maximum upload size: {{ config.MAX_UPLOAD_SIZE_MB }} MB</p>
+
+        <button class="button button-block" type="submit">Upload to Library</button>
+    </form>
+
+    <p class="secondary-action">
+        <a href="{{ url_for('index') }}">Return to Library</a>
+    </p>
+</section>
+{% endblock %}

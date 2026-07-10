@@ -1,0 +1,12 @@
+<!-- version 2 -->
+{% extends "base.html" %}
+{% block title %}Conversion failed · KindleShelf Local{% endblock %}
+{% block content %}
+<section class="narrow-panel">
+    <p class="eyebrow">Conversion failed</p>
+    <h1>{{ book.title }}</h1>
+    <p>{{ error }}</p>
+    <p>Only DRM-free files can be converted. Check that the source ebook is valid and not DRM-protected.</p>
+    <a class="button button-block" href="{{ url_for('index') }}">Return to library</a>
+</section>
+{% endblock %}

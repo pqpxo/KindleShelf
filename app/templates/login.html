@@ -1,0 +1,15 @@
+<!-- version 2 -->
+{% extends "base.html" %}
+{% block title %}Unlock · KindleShelf Local{% endblock %}
+{% block content %}
+<section class="narrow-panel">
+    <p class="eyebrow">Private library</p>
+    <h1>Enter your access PIN</h1>
+    <form method="post" action="{{ url_for('login') }}">
+        <input type="hidden" name="next" value="{{ next }}">
+        <label for="pin">PIN</label>
+        <input id="pin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" required autofocus>
+        <button class="button button-block" type="submit">Unlock</button>
+    </form>
+</section>
+{% endblock %}

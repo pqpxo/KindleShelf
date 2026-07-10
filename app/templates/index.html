@@ -1,0 +1,85 @@
+<!-- version 3 -->
+{% extends "base.html" %}
+{% block title %}Library · KindleShelf Local{% endblock %}
+{% block content %}
+<section class="hero">
+    <p class="eyebrow">SMB-backed ebook library</p>
+    <h1>Your books, ready for Kindle</h1>
+    <p>Add an ebook through the Windows network share or upload a MOBI file in the web interface, then download it on your Kindle.</p>
+</section>
+
+<section class="panel">
+    <form class="filter-form" method="get" action="{{ url_for('index') }}">
+        <div class="field-grow">
+            <label for="q">Search library</label>
+            <input id="q" name="q" type="search" value="{{ search }}" placeholder="Title, author or folder">
+        </div>
+        <div>
+            <label for="sort">Sort</label>
+            <select id="sort" name="sort">
+                <option value="title" {% if sort == 'title' %}selected{% endif %}>Title</option>
+                <option value="newest" {% if sort == 'newest' %}selected{% endif %}>Newest first</option>
+                <option value="format" {% if sort == 'format' %}selected{% endif %}>Format</option>
+            </select>
+        </div>
+        <button class="button button-secondary" type="submit">Apply</button>
+    </form>
+</section>
+
+<section class="library-heading">
+    <div>
+        <h2>Library</h2>
+        <p>{{ books|length }} supported file{% if books|length != 1 %}s{% endif %}</p>
+    </div>
+</section>
+
+{% if books %}
+<div class="book-list">
+    {% for book in books %}
+    <article class="book-card">
+        <div class="book-main">
+            <span class="format-badge">{{ book.extension }}</span>
+            <span class="book-copy">
+                <strong>{{ book.title }}</strong>
+                <span>{{ book.author }}</span>
+                <small>{{ book.size_label }} · {{ book.modified_label }}</small>
+            </span>
+        </div>
+        <div class="book-actions">
+            <a class="button button-small" href="{{ url_for('download_book', book_id=book.book_id) }}">Kindle MOBI</a>
+            <a
+                class="remove-button"
+                href="{{ url_for('remove_book', book_id=book.book_id) }}"
+                aria-label="Remove {{ book.title }} from the library"
+                title="Remove from library"
+            >X</a>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<section class="empty-state">
+    <h2>No ebooks found</h2>
+    <p>Copy EPUB, MOBI, AZW3, PDF, DOCX or another supported ebook into the SMB share, then refresh.</p>
+    {% if search %}<p><a href="{{ url_for('index') }}">Clear the search</a></p>{% endif %}
+</section>
+{% endif %}
+
+<section class="help-grid">
+    <div class="help-card">
+        <span class="step">1</span>
+        <h3>Add an ebook</h3>
+        <p>Use the <strong>Upload</strong> page for MOBI files, or map <code>\\SERVER-IP\KindleShelf</code> from Windows.</p>
+    </div>
+    <div class="help-card">
+        <span class="step">2</span>
+        <h3>Download on Kindle</h3>
+        <p>Open this library in the Kindle browser and tap <strong>Kindle MOBI</strong> beside a book.</p>
+    </div>
+    <div class="help-card">
+        <span class="step">3</span>
+        <h3>Remove finished books</h3>
+        <p>Tap the <strong>X</strong> beside a title and confirm to remove the source file from the shared library.</p>
+    </div>
+</section>
+{% endblock %}
