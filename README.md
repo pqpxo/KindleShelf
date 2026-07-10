@@ -1,5 +1,9 @@
 <!-- version 3 -->
-# KindleShelf Local v1.2.0
+<p align="center">
+  <img src="logo.png" alt="KindleShelf" width="248" />
+</p>
+
+# KindleShelf Local
 
 A private, Docker-hosted ebook library designed for the Kindle built-in browser. KindleShelf scans an SMB-backed folder and converts DRM-free ebooks to Kindle-compatible MOBI files using Calibre.
 
