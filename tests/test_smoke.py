@@ -13,6 +13,7 @@ os.environ.update(
     DATA_PATH=str(ROOT / "data"),
     APP_PIN="1234",
     SECRET_KEY="replace-with-a-long-random-value",
+    TRUSTED_PROXIES="10.9.9.9",
 )
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
 app_module = importlib.import_module("app")
@@ -107,3 +108,63 @@ def test_upload_rejects_non_mobi():
         follow_redirects=True,
     )
     assert b"does not appear to be a valid MOBI" in response.data
+
+
+def test_forwarded_for_only_trusted_from_proxy():
+    app_module.failed_logins.clear()
+    direct = app.test_client()
+    for spoofed in range(6):
+        direct.post(
+            "/login",
+            data={"pin": "nope"},
+            headers={"X-Forwarded-For": f"203.0.113.{spoofed}"},
+            environ_base={"REMOTE_ADDR": "192.0.2.50"},
+        )
+    assert "192.0.2.50" in app_module.failed_logins
+    assert len(app_module.failed_logins) == 1
+
+    app_module.failed_logins.clear()
+    proxied = app.test_client()
+    proxied.post(
+        "/login",
+        data={"pin": "nope"},
+        headers={"X-Forwarded-For": "198.51.100.7"},
+        environ_base={"REMOTE_ADDR": "10.9.9.9"},
+    )
+    assert list(app_module.failed_logins) == ["198.51.100.7"]
+
+
+def test_csrf_token_is_tied_to_session():
+    alice, mallory = logged_in_client(), logged_in_client()
+    token = csrf(mallory)
+    (ROOT / "library" / "Keep Me.epub").write_bytes(b"x")
+    book_id = app_module.encode_book_id("Keep Me.epub")
+    assert alice.post(f"/book/{book_id}/remove", data={"csrf_token": token}).status_code == 400
+    assert (ROOT / "library" / "Keep Me.epub").exists()
+
+
+def test_cache_prune_keeps_current_books_only():
+    (ROOT / "library" / "Cached - Writer.epub").write_bytes(b"x")
+    book = app_module.get_book_from_id(app_module.encode_book_id("Cached - Writer.epub"))
+    current = app_module.conversion_cache_path(book).parent
+    stale = app_module.CACHE_ROOT / "stale-entry"
+    current.mkdir(parents=True, exist_ok=True)
+    stale.mkdir(parents=True, exist_ok=True)
+    app_module.prune_conversion_cache()
+    assert current.is_dir() and not stale.exists()
+
+
+def test_conversion_busy_message(monkeypatch):
+    (ROOT / "library" / "Queued - Writer.epub").write_bytes(b"x")
+    book = app_module.get_book_from_id(app_module.encode_book_id("Queued - Writer.epub"))
+    monkeypatch.setattr(app_module, "CONVERSION_QUEUE_SECONDS", 0.05)
+    assert app_module.conversion_slots.acquire(timeout=1)
+    try:
+        try:
+            app_module.convert_to_mobi(book)
+        except app_module.ConversionError as error:
+            assert "Try again" in str(error)
+        else:
+            raise AssertionError("expected ConversionError")
+    finally:
+        app_module.conversion_slots.release()
