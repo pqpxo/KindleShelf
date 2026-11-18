@@ -1,0 +1,14 @@
+# version 1
+.env
+__pycache__/
+*.py[cod]
+*.sqlite
+*.db
+.pytest_cache/
+.DS_Store
+Thumbs.db
+
+data/*
+!data/.gitkeep
+library/*
+!library/.gitkeep
