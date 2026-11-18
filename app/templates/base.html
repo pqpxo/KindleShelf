@@ -14,7 +14,7 @@
             <nav aria-label="Main navigation">
                 <a href="{{ url_for('index') }}">Library</a>
                 <a href="{{ url_for('upload_book') }}">Upload</a>
-                {% if config.APP_PIN %}
+                {% if config.APP_PIN and session.authenticated %}
                 <form class="inline-form" method="post" action="{{ url_for('logout') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="nav-button" type="submit">Log out</button>

@@ -9,6 +9,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import time
 import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -30,7 +31,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
-APP_VERSION = "1.2.2"
+APP_VERSION = "1.2.3"
 LIBRARY_ROOT = Path(os.getenv("LIBRARY_PATH", "/library")).resolve()
 DATA_ROOT = Path(os.getenv("DATA_PATH", "/data")).resolve()
 CACHE_ROOT = DATA_ROOT / "cache"
@@ -65,7 +66,8 @@ SUPPORTED_EXTENSIONS = {
 
 def load_or_create_secret_key() -> str:
     configured_key = os.getenv("SECRET_KEY", "").strip()
-    if configured_key:
+    # The old .env.example shipped a public placeholder; never sign sessions with it.
+    if configured_key and not configured_key.startswith("replace-with"):
         return configured_key
 
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
@@ -396,6 +398,30 @@ def valid_csrf_token() -> bool:
 app.jinja_env.globals["csrf_token"] = csrf_token
 
 
+LOGIN_MAX_FAILURES = 5
+LOGIN_LOCKOUT_SECONDS = 15 * 60
+# ponytail: per-process memory, so each Gunicorn worker counts separately and
+# restarts reset it. Good enough to stop PIN brute force on a home LAN.
+failed_logins: dict[str, list[float]] = {}
+
+
+def recent_failures(address: str) -> list[float]:
+    cutoff = time.monotonic() - LOGIN_LOCKOUT_SECONDS
+    attempts = [stamp for stamp in failed_logins.get(address, []) if stamp > cutoff]
+    failed_logins[address] = attempts
+    return attempts
+
+
+def safe_next_path(destination: str) -> str:
+    if (
+        not destination.startswith("/")
+        or destination.startswith("//")
+        or "\\" in destination
+    ):
+        return url_for("index")
+    return destination
+
+
 def login_required() -> bool:
     return bool(APP_PIN) and not session.get("authenticated", False)
 
@@ -427,13 +453,18 @@ def login():
         return redirect(url_for("index"))
 
     if request.method == "POST":
+        address = request.remote_addr or "unknown"
+        if len(recent_failures(address)) >= LOGIN_MAX_FAILURES:
+            flash("Too many incorrect attempts. Try again in 15 minutes.", "error")
+            return render_template("login.html", next=request.form.get("next", "")), 429
+
         entered_pin = request.form.get("pin", "")
-        if secrets.compare_digest(entered_pin, APP_PIN):
+        if secrets.compare_digest(entered_pin.encode("utf-8"), APP_PIN.encode("utf-8")):
+            failed_logins.pop(address, None)
+            session.clear()
             session["authenticated"] = True
-            destination = request.form.get("next") or url_for("index")
-            if not destination.startswith("/") or destination.startswith("//"):
-                destination = url_for("index")
-            return redirect(destination)
+            return redirect(safe_next_path(request.form.get("next") or url_for("index")))
+        failed_logins[address].append(time.monotonic())
         flash("Incorrect PIN.", "error")
 
     return render_template("login.html", next=request.args.get("next", ""))
