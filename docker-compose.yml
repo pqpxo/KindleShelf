@@ -13,13 +13,13 @@ services:
       HOME: /data/home
       LIBRARY_PATH: /library
       DATA_PATH: /data
-      SECRET_KEY: ${SECRET_KEY}
+      SECRET_KEY: ${SECRET_KEY:-}
       APP_PIN: ${APP_PIN:-}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       CONVERSION_TIMEOUT_SECONDS: ${CONVERSION_TIMEOUT_SECONDS:-300}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-100}
     ports:
-      - "${WEB_PORT:-8112}:8112"
+      - "${WEB_PORT:-8112}:8080"
     volumes:
       - ./library:/library
       - ./data:/data
@@ -29,14 +29,14 @@ services:
       - ALL
 
   samba:
-    image: docker.io/dockurr/samba:latest
+    image: docker.io/dockurr/samba:4.23.10
     container_name: kindleshelf-smb
     restart: unless-stopped
     network_mode: bridge
     environment:
       NAME: KindleShelf
       USER: ${SMB_USER:-kindle}
-      PASS: ${SMB_PASSWORD}
+      PASS: ${SMB_PASSWORD:?Set SMB_PASSWORD in .env}
       UID: ${PUID:-1000}
       GID: ${PGID:-1000}
       RW: "true"
