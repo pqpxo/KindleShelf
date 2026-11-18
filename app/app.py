@@ -400,8 +400,8 @@ app.jinja_env.globals["csrf_token"] = csrf_token
 
 LOGIN_MAX_FAILURES = 5
 LOGIN_LOCKOUT_SECONDS = 15 * 60
-# ponytail: per-process memory, so each Gunicorn worker counts separately and
-# restarts reset it. Good enough to stop PIN brute force on a home LAN.
+# ponytail: in-process memory. Gunicorn runs one worker (threads only) so the
+# count is shared; a restart resets it. Move to a file/DB if workers are added.
 failed_logins: dict[str, list[float]] = {}
 
 
