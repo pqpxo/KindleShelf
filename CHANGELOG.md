@@ -1,6 +1,13 @@
 <!-- version 3 -->
 # Changelog
 
+## 1.2.4 - 18 November 2026
+
+- `X-Forwarded-For` is only trusted from `TRUSTED_PROXIES`, so clients connecting directly cannot fake their IP to dodge the PIN lockout.
+- CSRF tokens are now tied to the browser session.
+- Calibre conversions are limited by `MAX_CONCURRENT_CONVERSIONS` (default 1). Extra requests wait up to a minute, then show a "try again" message.
+- Cached MOBIs for books removed or changed over SMB are now deleted after each conversion.
+
 ## 1.2.3 - 18 November 2026
 
 - Fixed the web port: Compose mapped to container port 8112 but Gunicorn listens on 8080.

@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 import os
 import re
 import secrets
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -31,7 +33,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
-APP_VERSION = "1.2.3"
+APP_VERSION = "1.2.4"
 LIBRARY_ROOT = Path(os.getenv("LIBRARY_PATH", "/library")).resolve()
 DATA_ROOT = Path(os.getenv("DATA_PATH", "/data")).resolve()
 CACHE_ROOT = DATA_ROOT / "cache"
@@ -40,6 +42,13 @@ CONVERSION_TIMEOUT_SECONDS = max(
     30,
     int(os.getenv("CONVERSION_TIMEOUT_SECONDS", "300")),
 )
+MAX_CONCURRENT_CONVERSIONS = max(1, int(os.getenv("MAX_CONCURRENT_CONVERSIONS", "1")))
+CONVERSION_QUEUE_SECONDS = 60
+TRUSTED_PROXIES = [
+    ipaddress.ip_network(value.strip(), strict=False)
+    for value in os.getenv("TRUSTED_PROXIES", "").split(",")
+    if value.strip()
+]
 MAX_UPLOAD_SIZE_MB = max(1, int(os.getenv("MAX_UPLOAD_SIZE_MB", "100")))
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() in {
     "1",
@@ -101,7 +110,28 @@ def load_or_create_secret_key() -> str:
 
 app = Flask(__name__)
 app.secret_key = load_or_create_secret_key()
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+
+def is_trusted_proxy(address: str) -> bool:
+    try:
+        peer = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    return any(peer in network for network in TRUSTED_PROXIES)
+
+
+plain_wsgi_app = app.wsgi_app
+proxied_wsgi_app = ProxyFix(plain_wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+
+def trusted_proxy_fix(environ, start_response):
+    """Honour X-Forwarded-* only from TRUSTED_PROXIES, so direct clients cannot spoof their IP."""
+    if is_trusted_proxy(environ.get("REMOTE_ADDR", "")):
+        return proxied_wsgi_app(environ, start_response)
+    return plain_wsgi_app(environ, start_response)
+
+
+app.wsgi_app = trusted_proxy_fix
 app.config.update(
     APP_PIN=bool(APP_PIN),
     SESSION_COOKIE_HTTPONLY=True,
@@ -325,6 +355,18 @@ def conversion_cache_path(book: Book) -> Path:
     return CACHE_ROOT / cache_key / f"{safe_download_stem(book.title)}.mobi"
 
 
+# Gunicorn runs one worker process, so this limits Calibre runs for the whole app.
+conversion_slots = threading.BoundedSemaphore(MAX_CONCURRENT_CONVERSIONS)
+
+
+def prune_conversion_cache() -> None:
+    """Delete cached MOBIs for books that were removed or changed outside the web page."""
+    keep = {conversion_cache_path(book).parent.name for book in scan_books()}
+    for entry in CACHE_ROOT.iterdir():
+        if entry.is_dir() and entry.name not in keep:
+            shutil.rmtree(entry, ignore_errors=True)
+
+
 def convert_to_mobi(book: Book) -> Path:
     if book.absolute_path.suffix.lower() == ".mobi":
         return book.absolute_path
@@ -333,6 +375,19 @@ def convert_to_mobi(book: Book) -> Path:
     if output_path.is_file() and output_path.stat().st_size > 0:
         return output_path
 
+    if not conversion_slots.acquire(timeout=CONVERSION_QUEUE_SECONDS):
+        raise ConversionError("Another book is being converted. Try again in a minute.")
+    try:
+        # Another request may have converted this book while we waited.
+        if not (output_path.is_file() and output_path.stat().st_size > 0):
+            run_calibre(book, output_path)
+            prune_conversion_cache()
+    finally:
+        conversion_slots.release()
+    return output_path
+
+
+def run_calibre(book: Book, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output_path.parent) as temporary_directory:
         temporary_output = Path(temporary_directory) / output_path.name
@@ -368,15 +423,17 @@ def convert_to_mobi(book: Book) -> Path:
             )
 
         os.replace(temporary_output, output_path)
-    return output_path
 
 
 CSRF_MAX_AGE_SECONDS = 12 * 60 * 60
-csrf_serializer = URLSafeTimedSerializer(app.secret_key, salt="kindleshelf-csrf-v1")
+csrf_serializer = URLSafeTimedSerializer(app.secret_key, salt="kindleshelf-csrf-v2")
 
 
 def csrf_token() -> str:
-    return csrf_serializer.dumps({"purpose": "form"})
+    # Tie tokens to this browser's session so a token issued to someone else is useless.
+    if "csrf_nonce" not in session:
+        session["csrf_nonce"] = secrets.token_hex(16)
+    return csrf_serializer.dumps(session["csrf_nonce"])
 
 
 def valid_csrf_token() -> bool:
@@ -392,7 +449,8 @@ def valid_csrf_token() -> bool:
     except (BadSignature, SignatureExpired):
         return False
 
-    return payload == {"purpose": "form"}
+    expected = session.get("csrf_nonce", "")
+    return bool(expected) and isinstance(payload, str) and secrets.compare_digest(payload, expected)
 
 
 app.jinja_env.globals["csrf_token"] = csrf_token

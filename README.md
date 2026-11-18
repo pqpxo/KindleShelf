@@ -40,6 +40,7 @@
 - Windows SMB share (`\\SERVER-IP\KindleShelf`) for adding books
 - Web upload page for `.mobi` files
 - On-demand conversion to MOBI with Calibre, with a cache so each book converts once
+- One conversion at a time by default, so a Raspberry Pi does not run out of memory
 - Search and sort by title, newest or format
 - Remove books from the library (with a confirmation page)
 - Optional PIN, with a lockout after 5 wrong attempts
@@ -102,7 +103,9 @@ All settings live in `.env`. Copy `.env.example` to start.
 | `SECRET_KEY` | blank | Signs login cookies. Blank = auto-generated and saved in `data/secret_key` |
 | `APP_PIN` | blank | PIN needed to use the site. Blank = no login (not recommended) |
 | `SESSION_COOKIE_SECURE` | `false` | Set `true` only if every visit is over HTTPS |
+| `TRUSTED_PROXIES` | blank | IP or CIDR of your reverse proxy (comma-separated). Only these may set `X-Forwarded-For` |
 | `CONVERSION_TIMEOUT_SECONDS` | `300` | Stop a Calibre conversion after this long (minimum 30) |
+| `MAX_CONCURRENT_CONVERSIONS` | `1` | Calibre conversions allowed at once. Keep at 1 on a Raspberry Pi |
 | `MAX_UPLOAD_SIZE_MB` | `100` | Largest file the upload page accepts |
 | `SMB_USER` | `kindle` | Username for the Windows share |
 | `SMB_PASSWORD` | none | **Required.** Password for the Windows share |
@@ -144,7 +147,16 @@ Tap **X** beside a book and confirm. This deletes the file from `library/` and i
 
 ## Reverse proxy
 
-KindleShelf trusts `X-Forwarded-*` headers from one proxy, so it works behind Nginx Proxy Manager or Caddy.
+KindleShelf works behind Nginx Proxy Manager or Caddy. Set `TRUSTED_PROXIES` in `.env` to your proxy's IP address so the PIN lockout sees each visitor's real IP:
+
+```env
+TRUSTED_PROXIES=192.168.1.10
+```
+
+Requests from any other address cannot set `X-Forwarded-For`, so nobody can dodge the lockout by faking it.
+
+> [!WARNING]
+> If you use a proxy but leave `TRUSTED_PROXIES` blank, every visitor through the proxy shares one IP, and 5 wrong PINs from anyone lock out everyone for 15 minutes.
 
 For Nginx Proxy Manager, create a Proxy Host with scheme `http`, forward host `SERVER-IP`, forward port `8112`, **Block Common Exploits** on and your SSL certificate with **Force SSL**.
 
@@ -174,7 +186,7 @@ Your `.env`, `library/` and `data/` folders are kept.
 | --- | --- | --- |
 | `library/` | Your ebooks | Yes |
 | `.env` | Settings and passwords | Yes |
-| `data/` | Secret key and MOBI cache | Optional, the cache rebuilds itself |
+| `data/` | Secret key and MOBI cache | Optional, the cache rebuilds itself and old entries are removed automatically |
 
 <br>
 
@@ -186,6 +198,8 @@ Your `.env`, `library/` and `data/` folders are kept.
 | "does not have write permission" when uploading or removing | Set `PUID`/`PGID` to the folder owner, then run `sudo chown -R "$(id -u):$(id -g)" library data` |
 | Conversion failed | The file is damaged or DRM-protected. Check `docker compose logs kindleshelf` |
 | Conversion times out on a Pi | Raise `CONVERSION_TIMEOUT_SECONDS` |
+| "Another book is being converted" | Only `MAX_CONCURRENT_CONVERSIONS` books convert at once. Wait a minute and try again |
+| Everyone gets "Too many incorrect attempts" through the proxy | Set `TRUSTED_PROXIES` to the proxy's IP |
 | "Too many incorrect attempts" | Wait 15 minutes, or run `docker compose restart kindleshelf` |
 | Compose says `Set SMB_PASSWORD in .env` | Add a password for the Windows share to `.env` |
 | Windows cannot reach the share | Check nothing else on the host uses port 445 (for example, a Samba install on the host) |
