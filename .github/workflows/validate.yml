@@ -1,0 +1,39 @@
+# version 2
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Compile application
+        run: python -m compileall -q app
+
+      - name: Run smoke tests
+        run: python -m pytest -q tests
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Create CI environment
+        run: cp .env.example .env && sed -i 's/^SMB_PASSWORD=.*/SMB_PASSWORD=ci-only/' .env
+
+      - name: Validate Compose file
+        run: docker compose config --quiet
